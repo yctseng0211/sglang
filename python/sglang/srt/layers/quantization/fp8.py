@@ -477,6 +477,18 @@ class Fp8LinearMethod(LinearMethodBase):
                     x.dtype,
                     True,  # is_vnni
                 )
+            # print("layer: ", layer) # layer:  ReplicatedLinear(in_features=7168, output_features=2112, bias=False)
+            # print("x.dtype:", x.dtype)
+            # print("bias: ", bias) # bias:  None
+            if isinstance(x, tuple):
+                return self.w8a8_block_fp8_linear(
+                    input=x[0],
+                    weight=layer.weight,
+                    block_size=self.quant_config.weight_block_size,
+                    weight_scale=layer.weight_scale_inv,
+                    input_scale=x[1],
+                    bias=bias,
+                )
 
             return self.w8a8_block_fp8_linear(
                 input=x,

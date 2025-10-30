@@ -253,7 +253,42 @@ def deepgemm_w8a8_block_fp8_linear_with_fallback(
     if bias is not None:
         output += bias
     return output.to(dtype=output_dtype).view(*output_shape)
+# def fp8_row_to_block_fp8(a_fp8, y_row, block=128):
+#     """
+#     a_fp8: [N, H] float8_e4m3fn   (RMSNorm + row-quant)
+#     y_row: [N]     float32        (row-scale from dynamic quant)
 
+#     return:
+#         q_fp8_block: [N, H]      FP8 (block-scale quant)
+#         x_scale_blk: [N, H//128] per-block scale (for gemm_a8w8_blockscale)
+#     """
+
+#     N, H = a_fp8.shape
+#     assert H % block == 0
+#     nblk = H // block
+
+#     # light decode：fp8 → fp16 and *row-scale
+#     a_fp16 = a_fp8.to(torch.float16) * y_row.view(N, 1)
+
+#     # blockwise
+#     a_blk = a_fp16.view(N, nblk, block)
+
+#     #  block absmax →  block scale
+#     # FP8 max ±448
+#     absmax = a_blk.abs().amax(dim=-1)               # [N, nblk]
+#     x_scale_blk = (absmax / 448.0).clamp_min(1e-8)  # devided 0
+
+#     # block - per-block re-quant → FP8
+#     q_blk = torch.round(a_blk / x_scale_blk.unsqueeze(-1)).clamp(-448, 448)
+#     q_fp8_block = q_blk.to(torch.float8_e4m3fn).view(N, H)
+
+#     return q_fp8_block, x_scale_blk
+
+# def row_scale_to_block_scale(y_scale, H, block=128):
+#     # y_scale: [N] (per-token / row scale)
+#     N = y_scale.numel()
+#     nblk = (H + block - 1) // block
+#     return y_scale.view(N, 1).expand(N, nblk).contiguous()
 
 def aiter_w8a8_block_fp8_linear(
     input: torch.Tensor,
@@ -263,19 +298,46 @@ def aiter_w8a8_block_fp8_linear(
     input_scale: Optional[torch.Tensor] = None,
     bias: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    assert input_scale is None
+    #assert input_scale is None
+
     input_2d = input.view(-1, input.shape[-1])
     output_shape = [*input.shape[:-1], weight.shape[0]]
+    #print("aiter_w8a8_block_fp8_linear - input.shape: ", input.shape)
+    #print("aiter_w8a8_block_fp8_linear - output.shape: ", output_shape)
+    #print("input_2d.dtype: ", input_2d.dtype)
+    #q_input, x_scale = aiter_per1x128_quant(input_2d, quant_dtype=aiter.dtypes.fp8)
+    if input_scale is not None:
+        q_input = input_2d
+        x_scale = input_scale
 
-    q_input, x_scale = aiter_per1x128_quant(input_2d, quant_dtype=aiter.dtypes.fp8)
+    else:
+        q_input, x_scale = aiter_per1x128_quant(input_2d, quant_dtype=aiter.dtypes.fp8)
+    #print("x_scale.dtype: ", x_scale.dtype)
+    #print("q_input.dtype: ", q_input.dtype)
+    #print(aiter_per1x128_quant) # per_group_quant_hip
+    #print("aiter_w8a8_block_fp8_linear - x_scale.shape: ", x_scale.shape)
+    #print("aiter_w8a8_block_fp8_linear - q_input.shape: ", q_input.shape)
     output = gemm_a8w8_blockscale(
-        q_input, weight, x_scale, weight_scale, dtype=input.dtype
+        q_input, weight, x_scale, weight_scale, dtype= torch.bfloat16 if input_scale is not None else input.dtype
     )
+
+    #print("output.dtype: ", output.dtype)
+    # origin
+    # input_2d.dtype:  torch.bfloat16
+    # x_scale.dtype: torch.float32
+    # q_input.dtype:  torch.float8_e4m3fn
+    # output.dtype:  torch.bfloat16
+
+    # fused
+    # input_2d.dtype:  torch.float8_e4m3fn
+    # x_scale.dtype: torch.float32
+    # q_input.dtype:  torch.float8_e4m3fn
+    # output.dtype:  torch.bfloat16
 
     if bias is not None:
         output += bias
 
-    return output.to(dtype=input_2d.dtype).view(*output_shape)
+    return output.to(dtype=torch.bfloat16 if input_scale is not None else input_2d.dtype).view(*output_shape)
 
 
 def triton_w8a8_block_fp8_linear(
