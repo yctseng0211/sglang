@@ -62,8 +62,6 @@ _is_gfx95_supported = is_gfx95_supported()
 
 if _use_aiter and _is_gfx95_supported:
     from sglang.srt.layers.quantization.rocm_mxfp4_utils import fused_rms_mxfp4_quant
-    # from aiter import rmsnorm2d_fwd_with_dynamicquant as fused_rms_fp8_quant
-    # from aiter import rmsnorm2d_fwd_with_add_dynamicquant as fused_rms_add_fp8_quant
     from aiter.ops.triton.fused_fp8_quant import (
         fused_rms_fp8_group_quant,
         fused_flatten_fp8_group_quant,
@@ -224,14 +222,9 @@ class LayerCommunicator:
         hidden_states: torch.Tensor,
         residual: torch.Tensor,
         forward_batch: ForwardBatch,
-        qaunt_format: str = "",
+        quant_format: str = "",
     ):
-        # print("quant format: ", qaunt_format)
-        # print("Hidden dtype: ", hidden_states.dtype)
-        # print("hidden_states.shape: ", hidden_states.shape)
-        # print("if residual is None: ", True if residual == None else False)
-        # print("_use_aiter ", _use_aiter)
-        # print("_is_gfx95_supported, ", _is_gfx95_supported)
+
         if hidden_states.shape[0] == 0:
             residual = hidden_states
         else:
@@ -249,7 +242,7 @@ class LayerCommunicator:
 
                 if residual is None:
                     residual = hidden_states
-                    if _use_aiter and _is_gfx95_supported and ("mxfp4" in qaunt_format):
+                    if _use_aiter and _is_gfx95_supported and ("mxfp4" in quant_format):
                         hidden_states = fused_rms_mxfp4_quant(
                             hidden_states,
                             self.input_layernorm.weight,
@@ -261,18 +254,11 @@ class LayerCommunicator:
                         )
 
                     # --- FP8 dynamic-quant path (no residual) ---
-                    elif _use_aiter and _is_gfx95_supported and ("fp8" in qaunt_format):
+                    elif _use_aiter and _is_gfx95_supported and ("fp8" in quant_format):
 
-                        # hidden_states: [N, H]
-                        # N, H = hidden_states.shape
-                        # hs_2d = hidden_states
                         group_size = 128
 
-                        # RMSNorm + FP8 per-group quant
-                        # return：
-                        #   out_fp8  : FP8 activation →  a8w8 GEMM
-                        #   out_bs   : block-scale →  gemm_a8w8_blockscale.x_scale
-                        hidden_states, _unquant, _out2, _res = fused_rms_fp8_group_quant(
+                        hidden_states, out1, out2, _res = fused_rms_fp8_group_quant(
                             hidden_states,
                             self.input_layernorm.weight,
                             self.input_layernorm.variance_epsilon,
@@ -285,36 +271,13 @@ class LayerCommunicator:
                             output_unquantized_inp1=False,
                         )
 
-                        # hidden_states = out_fp8
-                        # x_scale = out_bs
-
-                        #hidden_states = (out_fp8, out_bs)
-
-                        # N, H = hidden_states.shape
-
-                        # out_fp8 = torch.empty(N, H, device=hidden_states.device,
-                        #                       dtype=torch.float8_e4m3fn)
-                        # y_scale = torch.empty(N, device=hidden_states.device,
-                        #                       dtype=torch.float32)
-
-                        # fused_rms_fp8_quant(
-                        #     out_fp8,
-                        #     hidden_states,
-                        #     y_scale,
-                        #     self.input_layernorm.weight,
-                        #     self.input_layernorm.variance_epsilon,
-                        #     0,  # use_model_sensitive_rmsnorm=0; 
-                        # )
-                        # hidden_states = out_fp8
-
-
                     # --- FP8 dynamic-quant path (no residual) ---
 
 
                     else:
                         hidden_states = self.input_layernorm(hidden_states)
                 else:
-                    if _use_aiter and _is_gfx95_supported and ("mxfp4" in qaunt_format):
+                    if _use_aiter and _is_gfx95_supported and ("mxfp4" in quant_format):
                         hidden_states, residual = fused_rms_mxfp4_quant(
                             hidden_states,
                             self.input_layernorm.weight,
@@ -325,55 +288,39 @@ class LayerCommunicator:
                             residual,
                         )
                     # --- FP8 dynamic-quant path (residual) ---
-                    elif _use_aiter and _is_gfx95_supported and ("fp8" in qaunt_format):
-                        # hidden_states: [N, H]
-                        # N, H = hidden_states.shape
-                        # hs_2d = hidden_states
+                    elif _use_aiter and _is_gfx95_supported and ("fp8" in quant_format):
                         group_size = 128
-
                         # RMSNorm + FP8 per-group quant
-                        # return：
+                        # return hidden_states：
                         #   out_fp8  : FP8 activation →  a8w8 GEMM
                         #   out_bs   : block-scale →  gemm_a8w8_blockscale.x_scale
-                        hidden_states, _unquant, _out2, _res = fused_rms_fp8_group_quant(
+                        hidden_states, out1, out2, _res = fused_rms_fp8_group_quant(
                             hidden_states,
                             self.input_layernorm.weight,
                             self.input_layernorm.variance_epsilon,
-                            inp2=None,            # prepare_attn 
+                            inp2=None,
                             inp2_weight=None,
                             inp2_epsilon=None,
                             group_size=group_size,
                             dtype_quant=torch.float8_e4m3fn,
-                            res1=residual,            # residual_in
+                            res1=residual,
                             output_unquantized_inp1=False,
                         )
-                        #hidden_states = (out_fp8, out_bs)
+
                         residual = _res
                     # --- FP8 dynamic-quant path (residual) ---
                     else:
                         hidden_states, residual = self.input_layernorm(
                             hidden_states, residual
                         )
-        #print("Hidden dtype: ", hidden_states.dtype)  #torch.bfloat16
 
-        # if _use_aiter and _is_gfx95_supported and ("fp8" in qaunt_format):
-        #     print("prepare_attn - hidden_states.shape: ", hidden_states[0].shape)
-        # else:
-        #     print("prepare_attn - hidden_states.shape: ", hidden_states.shape)
-
-
-        # if _use_aiter and _is_gfx95_supported and ("fp8" in qaunt_format):
-        #     hidden_states = (hidden_states, y_scale)
         
         hidden_states = self._communicate_simple_fn(
             hidden_states=hidden_states,
             forward_batch=forward_batch,
             context=self._context,
         )
-        #print("Hidden dtype: ", hidden_states.dtype)  #torch.bfloat16
-        # if _use_aiter and _is_gfx95_supported and ("fp8" in qaunt_format):
-        #     hidden_states = (hidden_states, y_scale)
-        
+
         return hidden_states, residual
 
     def prepare_mlp(
