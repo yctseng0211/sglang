@@ -2608,6 +2608,15 @@ class DeepseekV2DecoderLayer(nn.Module):
             and self.self_attn.fused_qkv_a_proj_with_mqa.weight.dtype == torch.uint8
             else ""
         )
+        quant_format = (
+            "fp8"
+            if _is_gfx95_supported
+            and getattr(self.self_attn, "fused_qkv_a_proj_with_mqa", None) is not None
+            and getattr(self.self_attn.fused_qkv_a_proj_with_mqa, "weight", None)
+            is not None
+            and self.self_attn.fused_qkv_a_proj_with_mqa.weight.dtype == torch.float8_e4m3fn
+            else ""
+        )
 
         hidden_states, residual = self.layer_communicator.prepare_attn(
             hidden_states,
