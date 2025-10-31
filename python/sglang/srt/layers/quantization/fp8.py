@@ -477,7 +477,7 @@ class Fp8LinearMethod(LinearMethodBase):
                     x.dtype,
                     True,  # is_vnni
                 )
-                
+
             if isinstance(x, tuple):
                 return self.w8a8_block_fp8_linear(
                     input=x[0],

@@ -243,7 +243,7 @@ class ReplicatedLinear(LinearBase):
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         bias = self.bias if not self.skip_bias_add else None
         assert self.quant_method is not None
-        #print("self.quant_method", self.quant_method) # fp8.Fp8LinearMethod
+        # print("self.quant_method", self.quant_method) # fp8.Fp8LinearMethod
         output = self.quant_method.apply(self, x, bias)
         output_bias = self.bias if self.skip_bias_add else None
         return output, output_bias
@@ -419,7 +419,7 @@ class ColumnParallelLinear(LinearBase):
 
         # Matrix multiply.
         assert self.quant_method is not None
-        #print("ColumnParallelLinear - self.quant_method = ", self.quant_method)
+        # print("ColumnParallelLinear - self.quant_method = ", self.quant_method)
         output_parallel = self.quant_method.apply(self, input_, bias)
         if self.gather_output:
             # All-gather across the partitions.

@@ -75,13 +75,12 @@ from sglang.srt.utils import (
     is_cuda_alike,
     is_xpu,
     kill_process_tree,
+    maybe_reindex_device_id,
     require_mlp_sync,
     require_mlp_tp_gather,
     set_gpu_proc_affinity,
     suppress_other_loggers,
 )
-
-from rpdTracerControl import rpdTracerControl
 from sglang.srt.utils.hf_transformers_utils import get_tokenizer
 
 profile_activities = [torch.profiler.ProfilerActivity.CPU] + [
@@ -109,8 +108,6 @@ class BenchArgs:
     profile: bool = False
     profile_record_shapes: bool = False
     profile_filename_prefix: str = "profile"
-    enable_prefill_prof: bool = False
-    enable_decode_prof: bool = False
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser):
@@ -153,14 +150,6 @@ class BenchArgs:
             help="Prefix of the profiling file names. The full profiling result file(s) be "
             '"[profile_filename_prefix]_batch[batch_size]_input[input_len]_output[output_len].trace.json.gz"',
         )
-        parser.add_argument(
-            "--enable-decode-prof",
-            action='store_true',
-            help="enable decode profiler.")
-        parser.add_argument(
-            "--enable-prefill-prof",
-           action='store_true',
-            help="enable prefill profiler.")
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace):
@@ -171,7 +160,7 @@ class BenchArgs:
         )
 
 
-def load_model(server_args, port_args, tp_rank):
+def load_model(server_args, port_args, gpu_id, tp_rank):
     suppress_other_loggers()
     rank_print = print if tp_rank == 0 else lambda *args, **kwargs: None
     moe_ep_rank = tp_rank // (server_args.tp_size // server_args.ep_size)
@@ -180,7 +169,7 @@ def load_model(server_args, port_args, tp_rank):
     model_runner = ModelRunner(
         model_config=model_config,
         mem_fraction_static=server_args.mem_fraction_static,
-        gpu_id=tp_rank,
+        gpu_id=gpu_id,
         tp_rank=tp_rank,
         tp_size=server_args.tp_size,
         moe_ep_rank=moe_ep_rank,
@@ -283,7 +272,7 @@ def prepare_synthetic_inputs_for_latency_test(
 def extend(reqs, model_runner):
     # Create dummy tree_cache for benchmarks (no prefix caching, just allocation)
     dummy_tree_cache = SimpleNamespace(
-        page_size=1,
+        page_size=model_runner.server_args.page_size,
         device=model_runner.device,
         token_to_kv_pool_allocator=model_runner.token_to_kv_pool_allocator,
     )
@@ -331,6 +320,7 @@ def _maybe_prepare_mlp_sync_batch(batch: ScheduleBatch, model_runner):
             speculative_num_draft_tokens=None,
             require_mlp_tp_gather=require_mlp_tp_gather(model_runner.server_args),
             disable_overlap_schedule=model_runner.server_args.disable_overlap_schedule,
+            offload_tags=set(),
         )
 
 
@@ -362,6 +352,7 @@ def correctness_test(
     server_args,
     port_args,
     bench_args,
+    gpu_id,
     tp_rank,
 ):
     # Configure the logger
@@ -369,7 +360,7 @@ def correctness_test(
     rank_print = print if tp_rank == 0 else lambda *args, **kwargs: None
 
     # Load the model
-    model_runner, tokenizer = load_model(server_args, port_args, tp_rank)
+    model_runner, tokenizer = load_model(server_args, port_args, gpu_id, tp_rank)
 
     # Prepare inputs
     custom_prompts = _read_prompts_from_file(bench_args.prompt_filename, rank_print)
@@ -411,7 +402,6 @@ def synchronize(device):
 
 
 def latency_test_run_once(
-    is_warm_up, enable_prefill_prof, enable_decode_prof, tp_rank,
     run_name,
     model_runner,
     rank_print,
@@ -457,18 +447,8 @@ def latency_test_run_once(
     # Prefill
     synchronize(device)
     tic = time.perf_counter()
-
-    if enable_prefill_prof and not is_warm_up and tp_rank == 0:
-        print("Start profile Prefill")
-        prefill_profile = rpdTracerControl()
-        prefill_profile.start()
-
     next_token_ids, _, batch = extend(reqs, model_runner)
     synchronize(device)
-
-    if enable_prefill_prof and not is_warm_up and tp_rank == 0:
-        prefill_profile.stop()
-
     prefill_latency = time.perf_counter() - tic
     tot_latency += prefill_latency
     throughput = input_len * batch_size / prefill_latency
@@ -486,13 +466,6 @@ def latency_test_run_once(
 
     # Decode
     decode_latencies = []
-
-    if enable_decode_prof and not is_warm_up and tp_rank == 0:
-        print("Start profile Decode")
-        # Create first instance (this loads the profiler and creates the file)
-        decode_profile = rpdTracerControl()
-        decode_profile.start()
-
     for i in range(output_len - 1):
         synchronize(device)
         if profile and i == output_len / 2:
@@ -524,8 +497,6 @@ def latency_test_run_once(
                 f"torch profiler chrome trace for decoding 1 token saved to {trace_filename}"
             )
 
-    if enable_decode_prof and not is_warm_up and tp_rank == 0:
-        decode_profile.stop()
     # Record decode timing from 2nd output
     if output_len > 1:
         med_decode_latency = np.median(decode_latencies)
@@ -549,6 +520,7 @@ def latency_test(
     server_args,
     port_args,
     bench_args,
+    gpu_id,
     tp_rank,
 ):
     initialize_moe_config(server_args)
@@ -564,7 +536,7 @@ def latency_test(
     rank_print = print if tp_rank == 0 else lambda *args, **kwargs: None
 
     # Load the model
-    model_runner, tokenizer = load_model(server_args, port_args, tp_rank)
+    model_runner, tokenizer = load_model(server_args, port_args, gpu_id, tp_rank)
 
     # Prepare inputs for warm up
     reqs = prepare_synthetic_inputs_for_latency_test(
@@ -574,10 +546,6 @@ def latency_test(
     # Warm up
     rank_print("Warmup ...")
     latency_test_run_once(
-        True,
-        bench_args.enable_prefill_prof,
-        bench_args.enable_decode_prof,
-        tp_rank,
         bench_args.run_name,
         model_runner,
         rank_print,
@@ -625,10 +593,6 @@ def latency_test(
 
         reqs = prepare_synthetic_inputs_for_latency_test(bs, il, bs_aligned_inputs)
         ret = latency_test_run_once(
-            False,
-            bench_args.enable_prefill_prof,
-            bench_args.enable_decode_prof,
-            tp_rank,
             bench_args.run_name,
             model_runner,
             rank_print,
@@ -656,12 +620,6 @@ def latency_test(
 
 
 def main(server_args, bench_args):
-    if bench_args.enable_prefill_prof or bench_args.enable_decode_prof:
-        # Optionally call this class method before creating first instance
-        rpdTracerControl.setFilename(name = "trace.rpd", append=False)
-
-        # Create first instance (this loads the profiler and creates the file)
-        profile = rpdTracerControl()
     server_args.cuda_graph_max_bs = max(bench_args.batch_size)
 
     _set_envs_and_config(server_args)
@@ -680,21 +638,23 @@ def main(server_args, bench_args):
     port_args = PortArgs.init_new(server_args)
 
     if server_args.tp_size == 1:
-        work_func(server_args, port_args, bench_args, 0)
+        work_func(server_args, port_args, bench_args, 0, 0)
     else:
         workers = []
         for tp_rank in range(server_args.tp_size):
-            proc = multiprocessing.Process(
-                target=work_func,
-                args=(
-                    server_args,
-                    port_args,
-                    bench_args,
-                    tp_rank,
-                ),
-            )
-            proc.start()
-            workers.append(proc)
+            with maybe_reindex_device_id(tp_rank) as gpu_id:
+                proc = multiprocessing.Process(
+                    target=work_func,
+                    args=(
+                        server_args,
+                        port_args,
+                        bench_args,
+                        gpu_id,
+                        tp_rank,
+                    ),
+                )
+                proc.start()
+                workers.append(proc)
 
         for proc in workers:
             proc.join()

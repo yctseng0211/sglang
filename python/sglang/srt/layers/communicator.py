@@ -61,12 +61,9 @@ _use_aiter = get_bool_env_var("SGLANG_USE_AITER") and is_hip()
 _is_gfx95_supported = is_gfx95_supported()
 
 if _use_aiter and _is_gfx95_supported:
+    from aiter.ops.triton.fused_fp8_quant import fused_rms_fp8_group_quant
+
     from sglang.srt.layers.quantization.rocm_mxfp4_utils import fused_rms_mxfp4_quant
-    from aiter.ops.triton.fused_fp8_quant import (
-        fused_rms_fp8_group_quant,
-        fused_flatten_fp8_group_quant,
-        fused_reduce_act_mul_fp8_group_quant,
-    )
 
 FUSE_ALLREDUCE_MAX_BATCH_SIZE = 2048
 
@@ -256,23 +253,20 @@ class LayerCommunicator:
                     # --- FP8 dynamic-quant path (no residual) ---
                     elif _use_aiter and _is_gfx95_supported and ("fp8" in quant_format):
 
-                        group_size = 128
-
-                        hidden_states, out1, out2, _res = fused_rms_fp8_group_quant(
+                        hidden_states, _, _, _res = fused_rms_fp8_group_quant(
                             hidden_states,
                             self.input_layernorm.weight,
                             self.input_layernorm.variance_epsilon,
-                            inp2=None,            # prepare_attn 
+                            inp2=None,
                             inp2_weight=None,
                             inp2_epsilon=None,
-                            group_size=group_size,
+                            group_size=128,
                             dtype_quant=torch.float8_e4m3fn,
-                            res1=None,            # residual_in
+                            res1=None,
                             output_unquantized_inp1=False,
                         )
 
                     # --- FP8 dynamic-quant path (no residual) ---
-
 
                     else:
                         hidden_states = self.input_layernorm(hidden_states)
@@ -289,32 +283,29 @@ class LayerCommunicator:
                         )
                     # --- FP8 dynamic-quant path (residual) ---
                     elif _use_aiter and _is_gfx95_supported and ("fp8" in quant_format):
-                        group_size = 128
                         # RMSNorm + FP8 per-group quant
                         # return hidden_states：
                         #   out_fp8  : FP8 activation →  a8w8 GEMM
                         #   out_bs   : block-scale →  gemm_a8w8_blockscale.x_scale
-                        hidden_states, out1, out2, _res = fused_rms_fp8_group_quant(
+                        hidden_states, _, _, residual = fused_rms_fp8_group_quant(
                             hidden_states,
                             self.input_layernorm.weight,
                             self.input_layernorm.variance_epsilon,
                             inp2=None,
                             inp2_weight=None,
                             inp2_epsilon=None,
-                            group_size=group_size,
+                            group_size=128,
                             dtype_quant=torch.float8_e4m3fn,
                             res1=residual,
                             output_unquantized_inp1=False,
                         )
 
-                        residual = _res
                     # --- FP8 dynamic-quant path (residual) ---
                     else:
                         hidden_states, residual = self.input_layernorm(
                             hidden_states, residual
                         )
 
-        
         hidden_states = self._communicate_simple_fn(
             hidden_states=hidden_states,
             forward_batch=forward_batch,

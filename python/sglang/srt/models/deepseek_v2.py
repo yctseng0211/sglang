@@ -153,6 +153,8 @@ _is_gfx95_supported = is_gfx95_supported()
 _use_aiter_gfx95 = _use_aiter and _is_gfx95_supported
 
 if _use_aiter_gfx95:
+    from aiter.ops.triton.fused_fp8_quant import fused_rms_fp8_group_quant
+
     from sglang.srt.layers.quantization.quark.utils import quark_post_load_weights
     from sglang.srt.layers.quantization.rocm_mxfp4_utils import (
         batched_gemm_afp4wfp4_pre_quant,
@@ -163,11 +165,6 @@ if _use_aiter_gfx95:
         aiter_dsv3_router_gemm,
         fused_qk_rope_cat,
         get_dsv3_gemm_output_zero_allocator_size,
-    )
-    from aiter.ops.triton.fused_fp8_quant import (
-        fused_rms_fp8_group_quant,
-        fused_flatten_fp8_group_quant,
-        fused_reduce_act_mul_fp8_group_quant,
     )
 
 if _is_cuda:
@@ -1332,7 +1329,7 @@ class DeepseekV2AttentionMLA(nn.Module):
                 return hidden_states, None, forward_batch, None
 
         attn_forward_method = self.dispatch_attn_forward_method(forward_batch)
-        #print("forward_prepare - attn_forward_method : ", attn_forward_method) #AttnForwardMethod.MLA, AttnForwardMethod.MHA
+        # print("forward_prepare - attn_forward_method : ", attn_forward_method) #AttnForwardMethod.MLA, AttnForwardMethod.MHA
         if attn_forward_method == AttnForwardMethod.MHA:
             inner_state = self.forward_normal_prepare(
                 positions, hidden_states, forward_batch, zero_allocator
@@ -1387,12 +1384,12 @@ class DeepseekV2AttentionMLA(nn.Module):
         )
         if inner_state is None:
             return hidden_states
-        #print("forward_core - attn_forward_method: ", attn_forward_method) # AttnForwardMethod.MLA
+        # print("forward_core - attn_forward_method: ", attn_forward_method) # AttnForwardMethod.MLA
         if attn_forward_method == AttnForwardMethod.MHA:
             return self.forward_normal_core(*inner_state)
         elif attn_forward_method == AttnForwardMethod.MHA_CHUNKED_KV:
             return self.forward_normal_chunked_kv_core(*inner_state)
-        elif attn_forward_method == AttnForwardMethod.MLA: #
+        elif attn_forward_method == AttnForwardMethod.MLA:  #
             return self.forward_absorb_core(*inner_state)
         elif attn_forward_method == AttnForwardMethod.NPU_MLA_SPARSE:
             return self.forward_npu_sparse_core(*inner_state)
@@ -1414,21 +1411,17 @@ class DeepseekV2AttentionMLA(nn.Module):
             q, latent_cache = self.fused_qkv_a_proj_with_mqa(hidden_states)[0].split(
                 [self.q_lora_rank, self.kv_lora_rank + self.qk_rope_head_dim], dim=-1
             )
-            # YC_DONE
 
             if _use_aiter_gfx95 and self.q_b_proj.weight.dtype == torch.float8_e4m3fn:
-                
-                group_size = 128
-                # RMSNorm + FP8 per-group quant
 
-                q, out1, out2, _res = fused_rms_fp8_group_quant(
+                q, _, _, _ = fused_rms_fp8_group_quant(
                     q,
                     self.q_a_layernorm.weight,
                     self.q_a_layernorm.variance_epsilon,
                     None,
                     None,
                     None,
-                    group_size=group_size,
+                    group_size=128,
                     dtype_quant=torch.float8_e4m3fn,
                     res1=None,
                     output_unquantized_inp1=False,
@@ -1449,21 +1442,22 @@ class DeepseekV2AttentionMLA(nn.Module):
         latent_cache = latent_cache.unsqueeze(1)
 
         if _use_aiter_gfx95 and self.kv_b_proj.weight.dtype == torch.float8_e4m3fn:
-            group_size = 128
-            # RMSNorm + FP8 per-group quant
-            kv_a_quanted, kv_a, out2, _res = fused_rms_fp8_group_quant(
+
+            kv_a_quanted, kv_a, _, _ = fused_rms_fp8_group_quant(
                 kv_a,
                 self.kv_a_layernorm.weight,
                 self.kv_a_layernorm.variance_epsilon,
                 None,
                 None,
                 None,
-                group_size=group_size,
+                group_size=128,
                 dtype_quant=torch.float8_e4m3fn,
-                res1=None, 
-                output_unquantized_inp1=True,
+                res1=None,
+                output_unquantized_inp1=True,  # return unqaunt kv_a
             )
-            kv = self.kv_b_proj(kv_a_quanted,)[0]
+            kv = self.kv_b_proj(
+                kv_a_quanted,
+            )[0]
 
         else:
             kv_a = self.kv_a_layernorm(kv_a)
@@ -1571,17 +1565,19 @@ class DeepseekV2AttentionMLA(nn.Module):
                     )
 
                 else:
-                    if _use_aiter_gfx95 and self.q_b_proj.weight.dtype == torch.float8_e4m3fn:
-                        group_size = 128
-                        # RMSNorm + FP8 per-group quant
-                        q, out1, k_nope, _res = fused_rms_fp8_group_quant(
+                    if (
+                        _use_aiter_gfx95
+                        and self.q_b_proj.weight.dtype == torch.float8_e4m3fn
+                    ):
+
+                        q, _, k_nope, _ = fused_rms_fp8_group_quant(
                             q,
                             self.q_a_layernorm.weight,
                             self.q_a_layernorm.variance_epsilon,
                             k_nope,
                             self.kv_a_layernorm.weight,
                             self.kv_a_layernorm.variance_epsilon,
-                            group_size=group_size,
+                            group_size=128,
                             dtype_quant=torch.float8_e4m3fn,
                             res1=None,
                             output_unquantized_inp1=False,
@@ -1625,7 +1621,6 @@ class DeepseekV2AttentionMLA(nn.Module):
             q_nope_out = q_nope_out[:, :expected_m, :]
         elif _is_hip:
             # TODO(haishaw): add bmm_fp8 to ROCm
-            # YC_TODO
 
             if _use_aiter_gfx95 and self.w_kc.dtype == torch.uint8:
                 x = q_nope.transpose(0, 1)
@@ -1899,7 +1894,6 @@ class DeepseekV2AttentionMLA(nn.Module):
                     k_nope = self.kv_a_layernorm(k_nope)
                 current_stream.wait_stream(self.alt_stream)
             else:
-                print("npu_sparse_prepare")
                 if _use_aiter_gfx95 and self.q_b_proj.weight.dtype == torch.uint8:
                     q, k_nope = fused_rms_mxfp4_quant(
                         q,
@@ -1910,18 +1904,19 @@ class DeepseekV2AttentionMLA(nn.Module):
                         self.kv_a_layernorm.variance_epsilon,
                     )
                 else:
-                    # YC_TODO
-                    if _use_aiter_gfx95 and self.q_b_proj.weight.dtype == torch.float8_e4m3fn:
-                        group_size = 128
-                        # RMSNorm + FP8 per-group quant
-                        q, out1, k_nope, _res = fused_rms_fp8_group_quant(
+                    if (
+                        _use_aiter_gfx95
+                        and self.q_b_proj.weight.dtype == torch.float8_e4m3fn
+                    ):
+
+                        q, _, k_nope, _ = fused_rms_fp8_group_quant(
                             q,
                             self.q_a_layernorm.weight,
                             self.q_a_layernorm.variance_epsilon,
                             k_nope,
                             self.kv_a_layernorm.weight,
                             self.kv_a_layernorm.variance_epsilon,
-                            group_size=group_size,
+                            group_size=128,
                             dtype_quant=torch.float8_e4m3fn,
                             res1=None,
                             output_unquantized_inp1=False,
@@ -2083,7 +2078,7 @@ class DeepseekV2AttentionMLA(nn.Module):
             q, latent_cache = self.fused_qkv_a_proj_with_mqa(hidden_states)[0].split(
                 [self.q_lora_rank, self.kv_lora_rank + self.qk_rope_head_dim], dim=-1
             )
-            # YC_TODO
+
             q = self.q_a_layernorm(q)
             q = self.q_b_proj(q)[0].view(-1, self.num_local_heads, self.qk_head_dim)
         else:
@@ -2565,7 +2560,8 @@ class DeepseekV2DecoderLayer(nn.Module):
             and getattr(self.self_attn, "fused_qkv_a_proj_with_mqa", None) is not None
             and getattr(self.self_attn.fused_qkv_a_proj_with_mqa, "weight", None)
             is not None
-            and self.self_attn.fused_qkv_a_proj_with_mqa.weight.dtype == torch.float8_e4m3fn
+            and self.self_attn.fused_qkv_a_proj_with_mqa.weight.dtype
+            == torch.float8_e4m3fn
             else ""
         )
 
