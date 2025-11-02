@@ -2555,7 +2555,7 @@ class DeepseekV2DecoderLayer(nn.Module):
             else ""
         )
         quant_format = (
-            "fp8_test"
+            "fp8"
             if _is_gfx95_supported
             and getattr(self.self_attn, "fused_qkv_a_proj_with_mqa", None) is not None
             and getattr(self.self_attn.fused_qkv_a_proj_with_mqa, "weight", None)
