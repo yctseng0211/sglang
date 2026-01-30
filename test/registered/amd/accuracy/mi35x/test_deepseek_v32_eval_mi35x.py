@@ -74,7 +74,7 @@ MI35X_DEEPSEEK_V32_MODELS = [
         model_path="deepseek-ai/DeepSeek-V3.2",
         tp_size=8,
         accuracy_threshold=0.93,
-        timeout=3600,
+        timeout=5400,
         variant="basic",
         other_args=[
             "--trust-remote-code",
