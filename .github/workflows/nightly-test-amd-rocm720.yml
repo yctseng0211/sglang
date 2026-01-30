@@ -72,6 +72,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Nightly Unit Test ROCm 7.2 (1-GPU)
         timeout-minutes: 60
         run: |
@@ -100,6 +105,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Nightly Test ROCm 7.2 (2-GPU)
         run: |
           > github_summary.md  # Clear summary file
@@ -126,6 +136,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi30x-20260130-preview --gpu-arch gfx942-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Nightly Accuracy Test ROCm 7.2 (2-GPU VLM MMMU)
         timeout-minutes: 180
@@ -154,6 +169,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi30x-20260130-preview --gpu-arch gfx942-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Performance Test ROCm 7.2 (2-GPU Text Models)
         timeout-minutes: 120
@@ -184,6 +204,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Performance Test ROCm 7.2 (2-GPU VLM Models)
         timeout-minutes: 180
         run: |
@@ -212,6 +237,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi30x-20260130-preview --gpu-arch gfx942-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Accuracy Test ROCm 7.2 (8-GPU GPT-OSS)
         timeout-minutes: 180
@@ -250,6 +280,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi30x-20260130-preview --gpu-arch gfx942-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Accuracy Test ROCm 7.2 (8-GPU Grok1-INT4)
         timeout-minutes: 60
@@ -292,6 +327,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Accuracy Test ROCm 7.2 (8-GPU Grok2)
         timeout-minutes: 60
         run: |
@@ -332,6 +372,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi30x-20260130-preview --gpu-arch gfx942-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Accuracy Test ROCm 7.2 (8-GPU DeepSeek-V3.1)
         timeout-minutes: 120
@@ -374,6 +419,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Accuracy Test ROCm 7.2 (8-GPU DeepSeek-V3.2 Basic)
         timeout-minutes: 120
         run: |
@@ -411,6 +461,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi30x-20260130-preview --gpu-arch gfx942-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Accuracy Test ROCm 7.2 (8-GPU DeepSeek-V3.2 MTP)
         timeout-minutes: 120
@@ -450,6 +505,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Accuracy Test ROCm 7.2 (8-GPU Kimi-K2)
         timeout-minutes: 120
         run: |
@@ -479,6 +539,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Test MI35x ROCm 7.2 (1-GPU)
         timeout-minutes: 60
         run: |
@@ -506,6 +571,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Accuracy Test MI35x ROCm 7.2 (8-GPU GPT-OSS)
         timeout-minutes: 180
         run: |
@@ -532,6 +602,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi35x-20260130-preview --gpu-arch gfx950-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Accuracy Test MI35x ROCm 7.2 (8-GPU Grok1-INT4)
         timeout-minutes: 60
@@ -574,6 +649,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Accuracy Test MI35x ROCm 7.2 (8-GPU Grok2)
         timeout-minutes: 60
         run: |
@@ -615,6 +695,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Accuracy Test MI35x ROCm 7.2 (8-GPU DeepSeek-R1-MXFP4)
         timeout-minutes: 180
         run: |
@@ -654,6 +739,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Accuracy Test MI35x ROCm 7.2 (8-GPU DeepSeek-V3.2)
         timeout-minutes: 120
         run: |
@@ -680,6 +770,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi30x-20260130-preview --gpu-arch gfx942-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Accuracy Test ROCm 7.2 MI35x (8-GPU DeepSeek-V3.2 TP+MTP)
         timeout-minutes: 120
@@ -709,6 +804,11 @@ jobs:
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
+
       - name: Performance Test MI35x ROCm 7.2 (8-GPU DeepSeek-V3.2 Basic)
         timeout-minutes: 150
         run: |
@@ -736,6 +836,11 @@ jobs:
           bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi35x-20260130-preview --gpu-arch gfx950-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: |
+          docker exec -w / ci_sglang pip install --force-reinstall /triton-3.5.1+rocm7.2.0.gita272dfa8-cp310-cp310-linux_x86_64.whl
+          bash scripts/ci/amd/amd_ci_install_dependency.sh
 
       - name: Performance Test MI35x ROCm 7.2 (8-GPU DeepSeek-V3.2 MTP)
         timeout-minutes: 150
