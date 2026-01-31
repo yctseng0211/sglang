@@ -54,10 +54,15 @@ class TestDeepseekV32TPMTP(CustomTestCase):
     def setUpClass(cls):
         cls.model = DEEPSEEK_V32_MODEL_PATH
         cls.base_url = DEFAULT_URL_FOR_TEST
+        # Use same args as perf test (which passes successfully)
         other_args = [
             "--trust-remote-code",
             "--tp",
             "8",
+            "--nsa-prefill-backend",
+            "tilelang",
+            "--nsa-decode-backend",
+            "tilelang",
             "--speculative-algorithm",
             "EAGLE",
             "--speculative-num-steps",
@@ -67,13 +72,9 @@ class TestDeepseekV32TPMTP(CustomTestCase):
             "--speculative-num-draft-tokens",
             "4",
             "--mem-fraction-static",
-            "0.85",
+            "0.7",
             "--model-loader-extra-config",
             '{"enable_multithread_load": true}',
-            "--nsa-prefill-backend",
-            "tilelang",
-            "--nsa-decode-backend",
-            "tilelang",
             "--watchdog-timeout",
             "1200",
         ]
