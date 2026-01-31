@@ -810,7 +810,7 @@ jobs:
 
   # MI35x 8-GPU DeepSeek-V3.2 TP+MTP Accuracy Test
   nightly-accuracy-8-gpu-mi35x-deepseek-v32-mtp-rocm720:
-    if: inputs.job_filter == '' || inputs.job_filter == 'all' || inputs.job_filter == 'nightly-8-gpu-deepseek-v31-rocm720'
+    if: inputs.job_filter == '' || inputs.job_filter == 'all' || inputs.job_filter == 'nightly-accuracy-8-gpu-mi35x-deepseek-v32-mtp-rocm720'
     runs-on: linux-mi35x-gpu-8
     steps:
       - name: Checkout code
@@ -819,9 +819,10 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup docker (ROCm 7.2)
+        timeout-minutes: 120
         run: |
           touch github_summary.md
-          bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi30x-20260130-preview --gpu-arch gfx942-rocm720
+          bash scripts/ci/amd/amd_ci_start_container.sh --custom-image rocm/sgl-dev:v0.5.8-rocm720-mi35x-20260130-preview --gpu-arch gfx950-rocm720
         env:
           GITHUB_WORKSPACE: ${{ github.workspace }}
 
