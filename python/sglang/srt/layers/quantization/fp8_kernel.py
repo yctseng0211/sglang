@@ -1564,27 +1564,32 @@ if _is_hip:
         )
 
     def _triton_dynamic_per_tensor_quant_fp8(output, input, scale):
-        """Triton fallback for dynamic per-tensor FP8 quantization."""
-        # Compute scale from input
+        """Triton fallback for dynamic per-tensor FP8 quantization.
+        Uses pure GPU operations to be compatible with CUDA graph capture.
+        """
         eps = 1e-10
         if _is_hip:
             bit8_max = 224.0
         else:
             bit8_max = fp8_max
-        absmax = torch.max(torch.abs(input)).item()
-        scale_val = max(absmax, eps) / bit8_max
-        scale.fill_(scale_val)
+        # Compute absmax on GPU without .item() to be CUDA graph compatible
+        absmax = torch.max(torch.abs(input))
+        # Use torch.clamp for eps comparison on GPU (absmax is a 0-d tensor)
+        scale_val = torch.clamp(absmax, min=eps) / bit8_max
+        scale.copy_(scale_val)
         # Quantize with computed scale
         output.copy_((input / scale_val).clamp(-bit8_max, bit8_max).to(output.dtype))
 
     def _triton_static_quant_fp8(output, input, scale):
-        """Triton fallback for static FP8 quantization."""
+        """Triton fallback for static FP8 quantization.
+        Uses pure GPU operations to be compatible with CUDA graph capture.
+        """
         if _is_hip:
             bit8_max = 224.0
         else:
             bit8_max = fp8_max
-        scale_val = scale.item()
-        output.copy_((input / scale_val).clamp(-bit8_max, bit8_max).to(output.dtype))
+        # Use scale tensor directly without .item() to be CUDA graph compatible
+        output.copy_((input / scale).clamp(-bit8_max, bit8_max).to(output.dtype))
 
     def scaled_fp8_quant(
         input: torch.Tensor,
