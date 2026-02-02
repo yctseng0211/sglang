@@ -1545,8 +1545,9 @@ class Scheduler(
             recv_req.logprob_start_len = -1
 
         if recv_req.logprob_start_len == -1:
-            if recv_req.return_logprob:
-                # If return_logprob is True, return the logprobs for output tokens by default
+            if recv_req.return_logprob and recv_req.token_ids_logprob is None:
+                # If logprob is required but neither token_ids_logprob nor logprob_start_len is
+                # set, return the logprobs for output tokens by default
                 req.logprob_start_len = len(req.origin_input_ids) - 1
             elif req.is_prefill_only:
                 # For prefill-only requests with logprob_start_len == -1, set logprob_start_len
@@ -2088,14 +2089,10 @@ class Scheduler(
         if self.dllm_staging_reqs.non_empty():
             self.dllm_staging_reqs.update_chunked_status()
 
-        # Print stats
-        if self.current_scheduler_metrics_enabled:
-            self.log_prefill_stats(
-                adder,
-                can_run_list,
-                running_bs=len(self.running_batch.reqs),
-                running_bs_offline_batch=0,
-            )
+        # Record for logging prefill stats after forward
+        self.adder = adder
+        self.can_run_list = can_run_list
+        self.running_bs = len(self.running_batch.reqs)
 
         # Record metrics
         for req in can_run_list:
