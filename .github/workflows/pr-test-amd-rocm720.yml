@@ -14,7 +14,7 @@ on:
       - ".github/workflows/pr-test-amd-rocm720.yml"
       - "docker/rocm720.Dockerfile"
   pull_request:
-    branches: [ dont-trigger-this-one-anyway ]
+    branches: [ main ]
     paths:
       - "python/**"
       - "scripts/ci/**"
